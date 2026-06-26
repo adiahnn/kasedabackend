@@ -36,6 +36,11 @@ async function getListing(req, res, next) {
   }
 }
 
+function stripHtml(str) {
+  if (typeof str !== 'string') return str
+  return str.replace(/<[^>]*>/g, '').trim()
+}
+
 async function createListing(req, res, next) {
   try {
     const { title, description, price, negotiable, category, type, location, lga, tags } = req.body
@@ -44,11 +49,11 @@ async function createListing(req, res, next) {
       seller: req.user._id,
       sellerName: req.user.fullName,
       sellerVerified: req.user.verificationStatus === 'verified',
-      title, description,
+      title: stripHtml(title), description: stripHtml(description),
       price: Number(price),
       negotiable: negotiable === true || negotiable === 'true',
-      category, type, images, location, lga,
-      tags: Array.isArray(tags) ? tags : (tags ? JSON.parse(tags) : []),
+      category: stripHtml(category), type, images, location: stripHtml(location), lga: stripHtml(lga),
+      tags: Array.isArray(tags) ? tags.map(stripHtml) : (tags ? JSON.parse(tags).map(stripHtml) : []),
     })
     res.status(201).json(listing)
   } catch (err) {

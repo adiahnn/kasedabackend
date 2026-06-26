@@ -32,8 +32,8 @@ app.use(cors({
   credentials: true,
 }))
 app.use(morgan('dev'))
-app.use(express.json({ limit: '10mb' }))
-app.use(express.urlencoded({ extended: true, limit: '10mb' }))
+app.use(express.json({ limit: '500kb' }))
+app.use(express.urlencoded({ extended: true, limit: '500kb' }))
 app.use(sanitize)
 
 const authLimiter = rateLimit({

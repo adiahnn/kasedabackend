@@ -6,6 +6,15 @@ function signToken(id) {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' })
 }
 
+function stripHtml(str) {
+  if (typeof str !== 'string') return str
+  return str.replace(/<[^>]*>/g, '').trim()
+}
+
+function isValidEmail(email) {
+  return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254
+}
+
 async function register(req, res, next) {
   try {
     const {
@@ -17,21 +26,30 @@ async function register(req, res, next) {
     if (!['buyer', 'seller', 'artisan'].includes(role)) {
       return res.status(400).json({ message: 'Invalid role' })
     }
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ message: 'Invalid email format' })
+    }
+    if (!fullName || typeof fullName !== 'string' || fullName.length > 200) {
+      return res.status(400).json({ message: 'Full name is required (max 200 characters)' })
+    }
+    if (!password || password.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters' })
+    }
 
     const files  = req.files || {}
     const fileUrl = (field) => files[field]?.[0]?.path
 
     const userData = {
-      fullName, email, phone, password, role, lga,
+      fullName: stripHtml(fullName), email: email.toLowerCase().trim(), phone, password, role, lga: stripHtml(lga),
       ...(role === 'seller' && {
-        bizName, bizType, bizCategory, bizYears, bizDescription, website,
+        bizName: stripHtml(bizName), bizType: stripHtml(bizType), bizCategory: stripHtml(bizCategory), bizYears: stripHtml(bizYears), bizDescription: stripHtml(bizDescription), website,
         kasedaBizCertUrl: fileUrl('kasedaBizCert'),
         cacCertUrl:       fileUrl('cacCert'),
         tinDocUrl:        fileUrl('tinDoc'),
         bizExtraUrl:      fileUrl('bizExtra'),
       }),
       ...(role === 'artisan' && {
-        trade, expYears, bio,
+        trade: stripHtml(trade), expYears: stripHtml(expYears), bio: stripHtml(bio),
         startingPrice: startingPrice ? Number(startingPrice) : undefined,
         kasedaArtCertUrl:  fileUrl('kasedaArtCert'),
         tradeTestCertUrl:  fileUrl('tradeTestCert'),
