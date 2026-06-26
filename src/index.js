@@ -37,9 +37,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 app.use(sanitize)
 
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { message: 'Too many login attempts, please try again after 15 minutes' },
+  windowMs: 5 * 60 * 1000,
+  max: 100,
+  message: { message: 'Too many requests, please try again shortly' },
 })
 app.use('/api/auth/login', authLimiter)
 app.use('/api/admin/auth/login', authLimiter)
