@@ -15,6 +15,9 @@ async function getConversations(req, res, next) {
 async function getOrCreateConversation(req, res, next) {
   try {
     const { userId } = req.params
+    if (userId === req.user._id.toString()) {
+      return res.status(400).json({ message: 'Cannot message yourself' })
+    }
     let convo = await Conversation.findOne({
       participants: { $all: [req.user._id, userId], $size: 2 },
     })
@@ -32,17 +35,18 @@ async function getMessages(req, res, next) {
   try {
     const { conversationId } = req.params
     const { page = 1, limit = 50 } = req.query
-    const skip = (Number(page) - 1) * Number(limit)
+    const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 100)
+    const skip = (Math.max(Number(page) || 1, 1) - 1) * safeLimit
 
     const convo = await Conversation.findById(conversationId)
-    if (!convo?.participants.includes(req.user._id)) {
+    if (!convo?.participants.some(p => p.equals(req.user._id))) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
     const messages = await Message.find({ conversation: conversationId })
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(Number(limit))
+      .limit(safeLimit)
       .populate('from', 'fullName avatar')
 
     await Message.updateMany(
@@ -62,7 +66,7 @@ async function sendMessage(req, res, next) {
     const { text } = req.body
 
     const convo = await Conversation.findById(conversationId)
-    if (!convo?.participants.includes(req.user._id)) {
+    if (!convo?.participants.some(p => p.equals(req.user._id))) {
       return res.status(403).json({ message: 'Access denied' })
     }
 

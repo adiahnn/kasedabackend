@@ -17,6 +17,15 @@ function startOfMonth() {
   return new Date(d.getFullYear(), d.getMonth(), 1)
 }
 
+function escapeRegex(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function clampLimit(val, def = 50, max = 100) {
+  const n = Number(val) || def
+  return Math.min(Math.max(n, 1), max)
+}
+
 /* ════════════════════════════════════════════════════════════════
    AUTH
 ════════════════════════════════════════════════════════════════ */
@@ -85,23 +94,25 @@ async function getUsers(req, res, next) {
   try {
     const { role, verificationStatus, search, page = 1, limit = 50 } = req.query
     const filter = {}
-    if (role)               filter.role               = role
-    if (verificationStatus) filter.verificationStatus = verificationStatus
+    if (role)               filter.role               = String(role)
+    if (verificationStatus) filter.verificationStatus = String(verificationStatus)
     if (search) {
+      const safe = escapeRegex(search)
       filter.$or = [
-        { fullName: { $regex: search, $options: 'i' } },
-        { email:    { $regex: search, $options: 'i' } },
-        { lga:      { $regex: search, $options: 'i' } },
+        { fullName: { $regex: safe, $options: 'i' } },
+        { email:    { $regex: safe, $options: 'i' } },
+        { lga:      { $regex: safe, $options: 'i' } },
       ]
     }
 
-    const skip  = (Number(page) - 1) * Number(limit)
+    const safeLimit = clampLimit(limit)
+    const skip  = (Math.max(Number(page) || 1, 1) - 1) * safeLimit
     const [users, total] = await Promise.all([
       User.find(filter)
         .select('-password -verificationDoc')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(Number(limit)),
+        .limit(safeLimit),
       User.countDocuments(filter),
     ])
 
@@ -127,7 +138,7 @@ async function getUsers(req, res, next) {
       totalOrders:   ocMap[u._id.toString()] ?? 0,
     }))
 
-    res.json({ users: result, total, page: Number(page), pages: Math.ceil(total / Number(limit)) })
+    res.json({ users: result, total, page: Number(page), pages: Math.ceil(total / safeLimit) })
   } catch (err) { next(err) }
 }
 
@@ -256,27 +267,29 @@ async function getListings(req, res, next) {
   try {
     const { status, category, search, page = 1, limit = 50 } = req.query
     const filter = {}
-    if (status)   filter.status   = status
-    if (category) filter.category = category
+    if (status)   filter.status   = String(status)
+    if (category) filter.category = String(category)
     if (search) {
+      const safe = escapeRegex(search)
       filter.$or = [
-        { title:      { $regex: search, $options: 'i' } },
-        { sellerName: { $regex: search, $options: 'i' } },
-        { lga:        { $regex: search, $options: 'i' } },
+        { title:      { $regex: safe, $options: 'i' } },
+        { sellerName: { $regex: safe, $options: 'i' } },
+        { lga:        { $regex: safe, $options: 'i' } },
       ]
     }
 
-    const skip = (Number(page) - 1) * Number(limit)
+    const safeLimit = clampLimit(limit)
+    const skip = (Math.max(Number(page) || 1, 1) - 1) * safeLimit
     const [listings, total] = await Promise.all([
       Listing.find(filter)
         .populate('seller', 'fullName email')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(Number(limit)),
+        .limit(safeLimit),
       Listing.countDocuments(filter),
     ])
 
-    res.json({ listings, total, page: Number(page), pages: Math.ceil(total / Number(limit)) })
+    res.json({ listings, total, page: Number(page), pages: Math.ceil(total / safeLimit) })
   } catch (err) { next(err) }
 }
 
@@ -321,20 +334,22 @@ async function getArtisans(req, res, next) {
     const { search, category, page = 1, limit = 50 } = req.query
     const userFilter = { role: 'artisan' }
     if (search) {
+      const safe = escapeRegex(search)
       userFilter.$or = [
-        { fullName: { $regex: search, $options: 'i' } },
-        { lga:      { $regex: search, $options: 'i' } },
-        { trade:    { $regex: search, $options: 'i' } },
+        { fullName: { $regex: safe, $options: 'i' } },
+        { lga:      { $regex: safe, $options: 'i' } },
+        { trade:    { $regex: safe, $options: 'i' } },
       ]
     }
 
-    const skip = (Number(page) - 1) * Number(limit)
+    const safeLimit = clampLimit(limit)
+    const skip = (Math.max(Number(page) || 1, 1) - 1) * safeLimit
     const [artisanUsers, total] = await Promise.all([
       User.find(userFilter)
         .select('-password -verificationDoc')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(Number(limit)),
+        .limit(safeLimit),
       User.countDocuments(userFilter),
     ])
 
@@ -348,7 +363,7 @@ async function getArtisans(req, res, next) {
       artisanProfile: pMap[u._id.toString()] ?? null,
     }))
 
-    res.json({ artisans: result, total, page: Number(page), pages: Math.ceil(total / Number(limit)) })
+    res.json({ artisans: result, total, page: Number(page), pages: Math.ceil(total / safeLimit) })
   } catch (err) { next(err) }
 }
 
@@ -383,8 +398,9 @@ async function activateArtisan(req, res, next) {
 async function getOrders(req, res, next) {
   try {
     const { status, page = 1, limit = 50 } = req.query
-    const filter = status ? { status } : {}
-    const skip   = (Number(page) - 1) * Number(limit)
+    const filter = status ? { status: String(status) } : {}
+    const safeLimit = clampLimit(limit)
+    const skip   = (Math.max(Number(page) || 1, 1) - 1) * safeLimit
 
     const [orders, total] = await Promise.all([
       Order.find(filter)
@@ -393,11 +409,11 @@ async function getOrders(req, res, next) {
         .populate('listing', 'title price')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(Number(limit)),
+        .limit(safeLimit),
       Order.countDocuments(filter),
     ])
 
-    res.json({ orders, total, page: Number(page), pages: Math.ceil(total / Number(limit)) })
+    res.json({ orders, total, page: Number(page), pages: Math.ceil(total / safeLimit) })
   } catch (err) { next(err) }
 }
 

@@ -70,9 +70,12 @@ async function login(req, res, next) {
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password required' })
     }
-    const user = await User.findOne({ email })
+    const user = await User.findOne({ email: String(email) })
     if (!user || !(await user.matchPassword(password))) {
       return res.status(401).json({ message: 'Invalid credentials' })
+    }
+    if (!user.isActive) {
+      return res.status(403).json({ message: 'Account suspended' })
     }
     const token = signToken(user._id)
     res.json({ token, user: user.toSafeObject() })

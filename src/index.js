@@ -1,9 +1,12 @@
 require('dotenv').config()
-const express      = require('express')
-const cors         = require('cors')
-const morgan       = require('morgan')
-const connectDB    = require('./config/db')
-const errorHandler = require('./middleware/errorHandler')
+const express        = require('express')
+const cors           = require('cors')
+const morgan         = require('morgan')
+const helmet         = require('helmet')
+const rateLimit      = require('express-rate-limit')
+const sanitize       = require('./middleware/sanitize')
+const connectDB      = require('./config/db')
+const errorHandler   = require('./middleware/errorHandler')
 
 const authRoutes     = require('./routes/auth')
 const usersRoutes    = require('./routes/users')
@@ -17,6 +20,8 @@ connectDB()
 
 const app = express()
 
+app.use(helmet())
+
 const allowedOrigins = (process.env.CLIENT_URL || '')
   .split(',')
   .map(o => o.trim())
@@ -27,8 +32,17 @@ app.use(cors({
   credentials: true,
 }))
 app.use(morgan('dev'))
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
+app.use(express.json({ limit: '10mb' }))
+app.use(express.urlencoded({ extended: true, limit: '10mb' }))
+app.use(sanitize)
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { message: 'Too many login attempts, please try again after 15 minutes' },
+})
+app.use('/api/auth/login', authLimiter)
+app.use('/api/admin/auth/login', authLimiter)
 
 app.get('/',       (_, res) => res.json({ status: 'ok', service: 'KASEDA Market API', version: '1.0.0' }))
 app.get('/health', (_, res) => res.json({ status: 'ok', service: 'KASEDA Market API', version: '1.0.0' }))

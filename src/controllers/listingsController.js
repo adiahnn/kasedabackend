@@ -5,17 +5,18 @@ async function getListings(req, res, next) {
   try {
     const { category, type, lga, search, page = 1, limit = 20 } = req.query
     const filter = { status: 'active' }
-    if (category) filter.category = category
-    if (type)     filter.type = type
-    if (lga)      filter.lga = lga
-    if (search)   filter.$text = { $search: search }
+    if (category) filter.category = String(category)
+    if (type)     filter.type = String(type)
+    if (lga)      filter.lga = String(lga)
+    if (search)   filter.$text = { $search: String(search) }
 
-    const skip  = (Number(page) - 1) * Number(limit)
+    const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100)
+    const skip  = (Math.max(Number(page) || 1, 1) - 1) * safeLimit
     const [listings, total] = await Promise.all([
-      Listing.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).populate('seller', 'fullName avatar verificationStatus'),
+      Listing.find(filter).sort({ createdAt: -1 }).skip(skip).limit(safeLimit).populate('seller', 'fullName avatar verificationStatus'),
       Listing.countDocuments(filter),
     ])
-    res.json({ listings, total, page: Number(page), pages: Math.ceil(total / Number(limit)) })
+    res.json({ listings, total, page: Number(page), pages: Math.ceil(total / safeLimit) })
   } catch (err) {
     next(err)
   }
@@ -23,10 +24,12 @@ async function getListings(req, res, next) {
 
 async function getListing(req, res, next) {
   try {
-    const listing = await Listing.findById(req.params.id).populate('seller', 'fullName avatar verificationStatus rating reviewCount lga')
+    const listing = await Listing.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { views: 1 } },
+      { new: true }
+    ).populate('seller', 'fullName avatar verificationStatus rating reviewCount lga')
     if (!listing) return res.status(404).json({ message: 'Listing not found' })
-    listing.views += 1
-    await listing.save()
     res.json(listing)
   } catch (err) {
     next(err)
@@ -60,7 +63,7 @@ async function updateListing(req, res, next) {
     if (listing.seller.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Not your listing' })
     }
-    const allowed = ['title', 'description', 'price', 'negotiable', 'category', 'location', 'lga', 'status', 'tags']
+    const allowed = ['title', 'description', 'price', 'negotiable', 'category', 'location', 'lga', 'tags']
     allowed.forEach(k => { if (req.body[k] !== undefined) listing[k] = req.body[k] })
     if (req.files?.length) listing.images = req.files.map(f => f.path)
     await listing.save()
