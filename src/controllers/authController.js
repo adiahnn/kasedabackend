@@ -12,7 +12,7 @@ function stripHtml(str) {
 }
 
 function isValidEmail(email) {
-  return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254
+  return typeof email === 'string' && /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email) && email.length <= 254
 }
 
 async function register(req, res, next) {
