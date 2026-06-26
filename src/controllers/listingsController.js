@@ -1,0 +1,100 @@
+const Listing = require('../models/Listing')
+const { cloudinary } = require('../config/cloudinary')
+
+async function getListings(req, res, next) {
+  try {
+    const { category, type, lga, search, page = 1, limit = 20 } = req.query
+    const filter = { status: 'active' }
+    if (category) filter.category = category
+    if (type)     filter.type = type
+    if (lga)      filter.lga = lga
+    if (search)   filter.$text = { $search: search }
+
+    const skip  = (Number(page) - 1) * Number(limit)
+    const [listings, total] = await Promise.all([
+      Listing.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).populate('seller', 'fullName avatar verificationStatus'),
+      Listing.countDocuments(filter),
+    ])
+    res.json({ listings, total, page: Number(page), pages: Math.ceil(total / Number(limit)) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+async function getListing(req, res, next) {
+  try {
+    const listing = await Listing.findById(req.params.id).populate('seller', 'fullName avatar verificationStatus rating reviewCount lga')
+    if (!listing) return res.status(404).json({ message: 'Listing not found' })
+    listing.views += 1
+    await listing.save()
+    res.json(listing)
+  } catch (err) {
+    next(err)
+  }
+}
+
+async function createListing(req, res, next) {
+  try {
+    const { title, description, price, negotiable, category, type, location, lga, tags } = req.body
+    const images = req.files?.map(f => f.path) ?? []
+    const listing = await Listing.create({
+      seller: req.user._id,
+      sellerName: req.user.fullName,
+      sellerVerified: req.user.verificationStatus === 'verified',
+      title, description,
+      price: Number(price),
+      negotiable: negotiable === true || negotiable === 'true',
+      category, type, images, location, lga,
+      tags: Array.isArray(tags) ? tags : (tags ? JSON.parse(tags) : []),
+    })
+    res.status(201).json(listing)
+  } catch (err) {
+    next(err)
+  }
+}
+
+async function updateListing(req, res, next) {
+  try {
+    const listing = await Listing.findById(req.params.id)
+    if (!listing) return res.status(404).json({ message: 'Listing not found' })
+    if (listing.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not your listing' })
+    }
+    const allowed = ['title', 'description', 'price', 'negotiable', 'category', 'location', 'lga', 'status', 'tags']
+    allowed.forEach(k => { if (req.body[k] !== undefined) listing[k] = req.body[k] })
+    if (req.files?.length) listing.images = req.files.map(f => f.path)
+    await listing.save()
+    res.json(listing)
+  } catch (err) {
+    next(err)
+  }
+}
+
+async function deleteListing(req, res, next) {
+  try {
+    const listing = await Listing.findById(req.params.id)
+    if (!listing) return res.status(404).json({ message: 'Listing not found' })
+    if (listing.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not your listing' })
+    }
+    for (const url of listing.images) {
+      const publicId = url.split('/').slice(-2).join('/').replace(/\.[^.]+$/, '')
+      await cloudinary.uploader.destroy(publicId).catch(() => {})
+    }
+    await listing.deleteOne()
+    res.json({ message: 'Listing deleted' })
+  } catch (err) {
+    next(err)
+  }
+}
+
+async function getMyListings(req, res, next) {
+  try {
+    const listings = await Listing.find({ seller: req.user._id }).sort({ createdAt: -1 })
+    res.json(listings)
+  } catch (err) {
+    next(err)
+  }
+}
+
+module.exports = { getListings, getListing, createListing, updateListing, deleteListing, getMyListings }
